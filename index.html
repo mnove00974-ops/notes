@@ -145,6 +145,9 @@
   #richEditor img { cursor: pointer; }
   #richEditor img.sel { outline: 3px solid var(--c); outline-offset: 2px; }
 
+  .rich a { color: inherit; font-weight: 500; text-decoration: underline; text-decoration-color: var(--ink-2); text-underline-offset: 3px; text-decoration-thickness: 1.5px; overflow-wrap: anywhere; }
+  .rich a:hover { text-decoration-color: var(--ink); }
+
   /* checklist */
   .rich ul.check { list-style: none; padding-left: 0; }
   .rich ul.check li { position: relative; padding-left: 1.9em; }
@@ -481,6 +484,42 @@
     return out.innerHTML;
   }
   function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+  /* ==================== CLICKABLE LINKS (shared page only) ==================== */
+  // Web addresses in the text become tappable links. Only http(s) is allowed.
+  const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+  function linkify(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      URL_RE.lastIndex = 0;
+      if (!URL_RE.test(text)) return;
+      URL_RE.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let last = 0, m;
+      while ((m = URL_RE.exec(text))) {
+        let raw = m[0];
+        const trail = (raw.match(/[.,;:!?)\]]+$/) || [''])[0];
+        raw = raw.slice(0, raw.length - trail.length);
+        let href = /^www\./i.test(raw) ? 'https://' + raw : raw;
+        let ok = false;
+        try { const u = new URL(href); ok = u.protocol === 'http:' || u.protocol === 'https:'; href = u.href; } catch (e) {}
+        if (!ok) continue;
+        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        const a = document.createElement('a');
+        a.href = href; a.textContent = raw;
+        a.target = '_blank'; a.rel = 'noopener noreferrer nofollow';
+        frag.appendChild(a);
+        last = m.index + raw.length;
+        URL_RE.lastIndex = last;
+      }
+      if (last === 0) return;
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag, node);
+    });
+  }
 
   /* ==================== ENCODING (older links still open) ==================== */
   // v2: { v:2, t: title, h: html, p: 'n'|'l'|'s', c: colorIndex }
@@ -821,6 +860,7 @@
     els.viewerTitle.textContent = data.title;
     els.viewerHead.hidden = !hasTitle;
     els.viewerBody.innerHTML = data.html;
+    linkify(els.viewerBody);
     const hasBody = els.viewerBody.textContent.trim().length > 0 || !!els.viewerBody.querySelector('img');
     els.viewerBody.hidden = !hasBody;
     els.viewerBody.style.marginTop = hasTitle ? '' : '0';
@@ -831,6 +871,7 @@
 
   // tick items on a shared checklist (only on this device)
   els.viewerBody.addEventListener('click', (e) => {
+    if (e.target.closest && e.target.closest('a')) return;
     const li = e.target.closest && e.target.closest('li');
     if (li && li.parentElement.classList.contains('check')) li.classList.toggle('done');
   });
