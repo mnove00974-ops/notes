@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en" data-color="butter">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<title>LinkNote</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<style>
+  /* ---------- Pastel palette ---------- */
+  :root { --c: #f7dc78; }
+  html[data-color="butter"]   { --c: #f7dc78; }
+  html[data-color="peach"]    { --c: #f8b99d; }
+  html[data-color="rose"]     { --c: #f5aac4; }
+  html[data-color="lavender"] { --c: #b9acf0; }
+  html[data-color="sky"]      { --c: #92c8f2; }
+  html[data-color="mint"]     { --c: #8fd6b0; }
+
+  :root {
+    --ink: #2d2a35;
+    --ink-2: #6b6877;
+    --ink-3: #a3a0ae;
+    --page: color-mix(in srgb, var(--c) 42%, #fff);
+    --paper: color-mix(in srgb, var(--c) 20%, #fff);
+    --input: rgba(255, 255, 255, 0.75);
+    --ring: rgba(45, 42, 53, 0.32);
+    --sep: rgba(45, 42, 53, 0.12);
+    --hover: rgba(45, 42, 53, 0.08);
+    --on-accent: #2d2a35;
+    --danger: #c4344f;
+    --toast: rgba(45, 42, 53, 0.92);
+    --shadow: 0 1px 2px rgba(45, 42, 53, .06), 0 18px 48px -18px rgba(45, 42, 53, .22);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #f3f1f7; --ink-2: #a9a6b5; --ink-3: #6d6a78;
+      --page: color-mix(in srgb, var(--c) 10%, #111113);
+      --paper: color-mix(in srgb, var(--c) 17%, #1c1c20);
+      --input: rgba(0, 0, 0, 0.28);
+      --ring: rgba(255, 255, 255, 0.34); --sep: rgba(255, 255, 255, 0.12); --hover: rgba(255, 255, 255, 0.1);
+      --danger: #ff7a90; --toast: rgba(70, 68, 78, 0.95);
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 18px 48px -18px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #f3f1f7; --ink-2: #a9a6b5; --ink-3: #6d6a78;
+    --page: color-mix(in srgb, var(--c) 10%, #111113);
+    --paper: color-mix(in srgb, var(--c) 17%, #1c1c20);
+    --input: rgba(0, 0, 0, 0.28);
+    --ring: rgba(255, 255, 255, 0.34); --sep: rgba(255, 255, 255, 0.12); --hover: rgba(255, 255, 255, 0.1);
+    --danger: #ff7a90; --toast: rgba(70, 68, 78, 0.95);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 18px 48px -18px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; min-height: 100vh;
+    background: var(--page); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 17px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    display: flex; flex-direction: column;
+    transition: background-color .25s ease, color .2s ease;
+  }
+  ::selection { background: color-mix(in srgb, var(--c) 70%, transparent); }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
+  input, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 8px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar {
+    position: sticky; top: 0; z-index: 20;
+    padding-top: env(safe-area-inset-top, 0px);
+    background: color-mix(in srgb, var(--page) 78%, transparent);
+    -webkit-backdrop-filter: saturate(160%) blur(18px); backdrop-filter: saturate(160%) blur(18px);
+  }
+  .toolbar-inner {
+    max-width: 800px; margin: 0 auto; height: 54px; padding: 0 14px;
+    display: flex; align-items: center; justify-content: flex-end;
+  }
+  .tools { display: flex; align-items: center; gap: 2px; }
+  .tool-sep { width: 1px; height: 18px; background: var(--sep); margin: 0 6px; }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
+    color: var(--ink-2); transition: background-color .15s ease, color .15s ease;
+  }
+  .icon-btn:hover { background: var(--hover); color: var(--ink); }
+  .icon-btn[aria-pressed="true"] { background: var(--hover); color: var(--ink); }
+  .icon-btn svg { width: 20px; height: 20px; }
+  .pill {
+    height: 34px; padding: 0 16px; margin-left: 8px; border-radius: 999px;
+    background: var(--c); color: var(--on-accent);
+    font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
+    display: inline-flex; align-items: center; gap: 6px;
+    box-shadow: inset 0 0 0 1px rgba(45, 42, 53, .08);
+    transition: filter .15s ease, transform .1s ease;
+  }
+  .pill svg { width: 16px; height: 16px; }
+  .pill:hover { filter: brightness(0.96) saturate(1.1); }
+  .pill:active { transform: scale(0.97); }
+
+  /* ---------- Page ---------- */
+  main { flex: 1; width: 100%; max-width: 800px; margin: 0 auto; padding: 8px 16px 40px; }
+  @media (min-width: 640px) { main { padding: 12px 28px 64px; } }
+
+  /* ---------- Format bar ---------- */
+  .format { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 0 auto 18px; max-width: 800px; }
+  .seg { display: inline-flex; padding: 3px; border-radius: 12px; background: var(--hover); }
+  .seg button {
+    padding: 6px 16px; border-radius: 9px; font-size: 14px; font-weight: 500; color: var(--ink-2);
+    transition: background-color .15s ease, color .15s ease;
+  }
+  .seg button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 1px 3px rgba(45,42,53,.12); }
+  .swatches { display: flex; gap: 10px; align-items: center; }
+  .swatch {
+    width: 24px; height: 24px; border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(45, 42, 53, .12);
+    transition: transform .12s ease;
+  }
+  .swatch:hover { transform: scale(1.1); }
+  .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--page), 0 0 0 4px var(--ink); }
+
+  /* ---------- Sheet (the "page" people receive) ---------- */
+  .sheet {
+    background: var(--paper); box-shadow: var(--shadow);
+    container-type: inline-size; width: 100%;
+    transition: background-color .25s ease;
+  }
+  .sheet-inner { display: flex; flex-direction: column; }
+  .head { position: relative; }
+
+  .title {
+    display: block; width: 100%; margin: 0; padding: 0; resize: none; overflow: hidden;
+    border: 0; outline: 0; background: transparent; color: var(--ink);
+    font-size: 34px; line-height: 1.15; font-weight: 700; letter-spacing: -0.025em; overflow-wrap: anywhere;
+  }
+  .body {
+    display: block; width: 100%; margin: 14px 0 0; padding: 0; resize: none; overflow: hidden;
+    border: 0; outline: 0; background: transparent; color: var(--ink);
+    font-size: 17px; line-height: 1.6; min-height: 28px; overflow-wrap: anywhere;
+  }
+  .title::placeholder, .body::placeholder, .add-row input::placeholder { color: var(--ink-3); opacity: 1; }
+  .view-body { white-space: pre-wrap; }
+
+  /* Note */
+  .sheet.note { border-radius: 26px; }
+  .sheet.note .sheet-inner { padding: 30px 28px 32px; }
+  #editorSheet.note .sheet-inner { min-height: 280px; }
+
+  /* Letter */
+  .sheet.letter {
+    max-width: 640px; margin-inline: auto; border-radius: 6px;
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  }
+  .sheet.letter .sheet-inner { padding: max(28px, 9cqw) max(26px, 10cqw); min-height: 92cqw; }
+  .sheet.letter .title { font-size: max(25px, 4.6cqw); font-weight: 600; letter-spacing: -0.01em; }
+  .sheet.letter .body { font-size: max(17px, 3cqw); line-height: 1.8; margin-top: 22px; }
+  .sheet.letter .head::after { content: ""; display: block; width: 44px; height: 3px; border-radius: 2px; background: var(--c); margin-top: 18px; }
+  .sheet.letter .row { font-size: max(17px, 2.9cqw); }
+  .sheet.letter .list-meta { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; }
+
+  /* Slide */
+  .sheet.slide { border-radius: 22px; }
+  .sheet.slide .sheet-inner {
+    min-height: 56.25cqw; justify-content: center; text-align: center;
+    padding: max(24px, 5.5cqw) max(22px, 8cqw);
+  }
+  .sheet.slide .title { font-size: max(27px, 5.6cqw); text-align: center; line-height: 1.12; }
+  .sheet.slide .body { font-size: max(16px, 2.5cqw); text-align: center; margin-top: 2.2cqw; line-height: 1.5; }
+  .sheet.slide .head::after { content: ""; display: block; width: 56px; height: 4px; border-radius: 2px; background: var(--c); margin: max(14px, 2.2cqw) auto 0; }
+  .sheet.slide .list-block { width: min(100%, 74cqw); margin-inline: auto; text-align: left; }
+  .sheet.slide .row { font-size: max(16px, 2.4cqw); }
+  .sheet.slide .list-meta { text-align: center; }
+
+  /* ---------- Lists ---------- */
+  .list-block { margin-top: 22px; }
+  .list-meta { font-size: 13px; color: var(--ink-2); margin: 0 0 6px; min-height: 18px; font-family: inherit; }
+  .items { list-style: none; margin: 0; padding: 0; }
+  .row { display: flex; align-items: flex-start; gap: 0.7em; padding: 0.25em 0; font-size: 17px; line-height: 1.6; position: relative; }
+  .lead { flex: none; width: max(22px, 1.3em); height: 1.6em; display: grid; place-items: center; }
+  .check {
+    width: max(20px, 1.2em); height: max(20px, 1.2em); border-radius: 50%;
+    border: 1.5px solid var(--ring); display: grid; place-items: center; color: transparent;
+    transition: background-color .15s ease, border-color .15s ease, transform .1s ease;
+  }
+  button.check:hover { border-color: var(--ink); }
+  button.check:active { transform: scale(0.9); }
+  .check svg { width: 55%; height: 55%; }
+  .check.done { background: var(--c); border-color: color-mix(in srgb, var(--c) 70%, #2d2a35); color: var(--on-accent); }
+  .check.ghost { border-style: dashed; opacity: .6; }
+  .dot { width: 0.36em; height: 0.36em; border-radius: 50%; background: var(--ink); }
+  .dot.ghost { background: var(--ink-3); }
+  .row input {
+    flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; padding: 0;
+    height: 1.6em; line-height: 1.6; color: var(--ink);
+  }
+  .row input.done { color: var(--ink-3); }
+  .remove {
+    flex: none; width: 24px; height: 24px; margin-top: 2px; border-radius: 50%; display: grid; place-items: center;
+    color: var(--ink-2); background: var(--hover); opacity: 0; transition: opacity .15s ease;
+  }
+  .remove svg { width: 12px; height: 12px; }
+  .row:hover .remove, .row:focus-within .remove { opacity: 1; }
+  .remove:hover { color: var(--danger); }
+  @media (hover: none) { .remove { opacity: .7; } }
+
+  .view-row { cursor: pointer; user-select: none; -webkit-user-select: none; }
+  .view-row.static { cursor: default; }
+  .view-row .label { flex: 1; min-width: 0; overflow-wrap: anywhere; transition: color .15s ease; }
+  .view-row .label.done { color: var(--ink-3); }
+  .view-empty { color: var(--ink-2); text-align: center; padding: 48px 0; font-size: 16px; }
+
+  /* ---------- Share ---------- */
+  .share {
+    margin: 22px auto 0; max-width: 640px; padding: 16px; border-radius: 18px;
+    background: var(--paper); box-shadow: var(--shadow); animation: rise .22s ease both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .share { animation: none; } * { transition: none !important; } }
+  .share-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .share-head strong { font-size: 15px; font-weight: 600; }
+  .share-head span { font-size: 13px; color: var(--ink-2); }
+  .share-field { display: flex; gap: 8px; }
+  .share-field input {
+    flex: 1; min-width: 0; height: 42px; padding: 0 12px; border-radius: 12px;
+    border: 1px solid var(--sep); background: var(--input); font-size: 14px; color: var(--ink-2); outline: 0; text-overflow: ellipsis;
+  }
+  .share-field input:focus { border-color: var(--ink-2); color: var(--ink); }
+  .share-field .pill { height: 42px; margin: 0; border-radius: 12px; padding: 0 18px; flex: none; }
+  .share p { margin: 10px 0 0; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+
+  /* ---------- Footer / toast ---------- */
+  .quiet-btn { color: var(--ink); font-size: 15px; font-weight: 500; padding: 8px 14px; border-radius: 999px; background: var(--hover); }
+  .quiet-btn:hover { background: color-mix(in srgb, var(--ink) 13%, transparent); }
+  .view-foot { margin-top: 28px; display: flex; justify-content: center; }
+  footer { padding: 0 20px calc(24px + env(safe-area-inset-bottom, 0px)); text-align: center; font-size: 12px; color: var(--ink-2); opacity: .8; }
+  .toast {
+    position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); z-index: 40;
+    transform: translate(-50%, 12px); opacity: 0; pointer-events: none; max-width: calc(100vw - 32px);
+    padding: 10px 18px; border-radius: 999px; background: var(--toast); color: #fff; font-size: 14px; font-weight: 500;
+    -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: 0 6px 24px rgba(0,0,0,.18);
+    transition: opacity .2s ease, transform .2s ease;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.error { background: var(--danger); color: #fff; }
+
+  @media (max-width: 480px) {
+    .sheet.note .title { font-size: 30px; }
+    .sheet.note .sheet-inner { padding: 24px 20px 26px; }
+    .format { justify-content: center; }
+  }
+</style>
+</head>
+<body>
+
+<header class="toolbar">
+  <div class="toolbar-inner">
+    <!-- Editor tools -->
+    <div class="tools" id="editorTools">
+      <button class="icon-btn" id="styleChecklistBtn" type="button" aria-label="Checklist" aria-pressed="true" title="Checklist">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="7" r="2.5"/><path d="M5 7l.8.8L7 6.3" stroke-width="1.4"/><path d="M12 7h9"/><circle cx="5.5" cy="17" r="2.5"/><path d="M12 17h9"/></svg>
+      </button>
+      <button class="icon-btn" id="styleBulletBtn" type="button" aria-label="Bulleted list" aria-pressed="false" title="Bulleted list">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></svg>
+      </button>
+      <span class="tool-sep" aria-hidden="true"></span>
+      <button class="icon-btn" id="clearEditorBtn" type="button" aria-label="Clear note" title="Clear note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg>
+      </button>
+      <button class="icon-btn" id="previewNoteBtn" type="button" aria-label="Preview" title="Preview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <button class="icon-btn" id="themeToggleBtn" type="button" aria-label="Switch appearance" title="Switch appearance">
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>
+      </button>
+      <button class="pill" id="generateLinkBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>
+        Share
+      </button>
+    </div>
+
+    <!-- Viewer tools -->
+    <div class="tools" id="viewerTools" hidden>
+      <button class="icon-btn" id="copySharedPageLinkBtn" type="button" aria-label="Copy link" title="Copy link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2"/></svg>
+      </button>
+      <button class="icon-btn" id="themeToggleBtn2" type="button" aria-label="Switch appearance" title="Switch appearance">
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>
+      </button>
+      <button class="pill" id="duplicateToEditBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        Edit a copy
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ============ Editor ============ -->
+  <section id="editorView" aria-label="Note editor">
+    <div class="format">
+      <div class="seg" id="paperSeg" role="group" aria-label="Page style">
+        <button type="button" data-paper="note">Note</button>
+        <button type="button" data-paper="letter">Letter</button>
+        <button type="button" data-paper="slide">Slide</button>
+      </div>
+      <div class="swatches" id="swatches" role="group" aria-label="Color"></div>
+    </div>
+
+    <article class="sheet note" id="editorSheet">
+      <div class="sheet-inner">
+        <div class="head">
+          <label for="noteTitleInput" class="sr-only">Title</label>
+          <textarea id="noteTitleInput" class="title" rows="1" maxlength="140" placeholder="Title" enterkeyhint="next"></textarea>
+        </div>
+        <label for="noteBodyInput" class="sr-only">Note</label>
+        <textarea id="noteBodyInput" class="body" rows="1" placeholder="Start writing…"></textarea>
+
+        <div class="list-block">
+          <p class="list-meta" id="editorListMeta"></p>
+          <ul class="items" id="editorItemsList"></ul>
+          <div class="row add-row">
+            <span class="lead" id="addLead" aria-hidden="true"></span>
+            <label for="newItemInput" class="sr-only">New list item</label>
+            <input id="newItemInput" type="text" placeholder="Add item" enterkeyhint="done" autocomplete="off" />
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <div class="share" id="shareResultBox" hidden>
+      <div class="share-head"><strong>Link ready</strong><span id="urlSizeLabel"></span></div>
+      <div class="share-field">
+        <input id="generatedUrlInput" type="text" readonly aria-label="Shareable link" />
+        <button class="pill" id="copyLinkBtn" type="button"><span id="copyBtnText">Copy link</span></button>
+      </div>
+      <p>Anyone with this link sees your page exactly as it looks here. Nothing is uploaded; the note is stored in the link itself.</p>
+    </div>
+  </section>
+
+  <!-- ============ Viewer ============ -->
+  <section id="viewerView" aria-label="Shared note" hidden>
+    <article class="sheet note" id="viewerSheet">
+      <div class="sheet-inner">
+        <div class="head" id="viewerHead"><h1 class="title" id="viewerTitle"></h1></div>
+        <div class="body view-body" id="viewerBody"></div>
+        <div class="list-block" id="viewerListWrapper" hidden>
+          <p class="list-meta" id="viewerProgressBadge"></p>
+          <ul class="items" id="viewerItemsList"></ul>
+        </div>
+        <div class="view-empty" id="viewerEmptyFallback" hidden>This note is empty.</div>
+      </div>
+    </article>
+    <div class="view-foot">
+      <button class="quiet-btn" id="createOwnNoteBtn" type="button">Create your own note</button>
+    </div>
+  </section>
+</main>
+
+<footer>Notes are compressed into the link. Nothing is stored on a server.</footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+  /* ==================== STATE ==================== */
+  const COLORS = ['butter', 'peach', 'rose', 'lavender', 'sky', 'mint'];
+  const COLOR_HEX = { butter: '#f7dc78', peach: '#f8b99d', rose: '#f5aac4', lavender: '#b9acf0', sky: '#92c8f2', mint: '#8fd6b0' };
+  const PAPERS = ['note', 'letter', 'slide'];
+
+  const state = { mode: 'editor', title: '', body: '', listStyle: 'check', paper: 'note', color: 'butter', items: [] };
+  let draft = null; // editor snapshot, restored when leaving a preview
+
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    editorView: $('editorView'), viewerView: $('viewerView'),
+    editorTools: $('editorTools'), viewerTools: $('viewerTools'),
+    editorSheet: $('editorSheet'), viewerSheet: $('viewerSheet'),
+    paperSeg: $('paperSeg'), swatches: $('swatches'),
+    toast: $('toast'),
+    noteTitleInput: $('noteTitleInput'), noteBodyInput: $('noteBodyInput'),
+    styleChecklistBtn: $('styleChecklistBtn'), styleBulletBtn: $('styleBulletBtn'),
+    editorItemsList: $('editorItemsList'), editorListMeta: $('editorListMeta'),
+    newItemInput: $('newItemInput'), addLead: $('addLead'),
+    clearEditorBtn: $('clearEditorBtn'), previewNoteBtn: $('previewNoteBtn'),
+    generateLinkBtn: $('generateLinkBtn'),
+    shareResultBox: $('shareResultBox'), generatedUrlInput: $('generatedUrlInput'),
+    urlSizeLabel: $('urlSizeLabel'), copyLinkBtn: $('copyLinkBtn'), copyBtnText: $('copyBtnText'),
+    viewerHead: $('viewerHead'), viewerTitle: $('viewerTitle'), viewerBody: $('viewerBody'),
+    viewerListWrapper: $('viewerListWrapper'), viewerProgressBadge: $('viewerProgressBadge'),
+    viewerItemsList: $('viewerItemsList'), viewerEmptyFallback: $('viewerEmptyFallback'),
+    copySharedPageLinkBtn: $('copySharedPageLinkBtn'),
+    duplicateToEditBtn: $('duplicateToEditBtn'), createOwnNoteBtn: $('createOwnNoteBtn')
+  };
+
+  const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  const X_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
+  /* ==================== THEME (light / dark) ==================== */
+  function storageGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function storageSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+  function isDarkNow() {
+    const forced = document.documentElement.getAttribute('data-theme');
+    if (forced) return forced === 'dark';
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+  function syncThemeIcons() {
+    const dark = isDarkNow();
+    document.querySelectorAll('.sun').forEach(n => n.hidden = !dark);
+    document.querySelectorAll('.moon').forEach(n => n.hidden = dark);
+  }
+  function initTheme() {
+    const saved = storageGet('linknote_theme');
+    if (saved === 'dark' || saved === 'light') document.documentElement.setAttribute('data-theme', saved);
+    syncThemeIcons();
+  }
+  function toggleTheme() {
+    const next = isDarkNow() ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    storageSet('linknote_theme', next);
+    syncThemeIcons();
+  }
+  $('themeToggleBtn').addEventListener('click', toggleTheme);
+  $('themeToggleBtn2').addEventListener('click', toggleTheme);
+  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncThemeIcons);
+
+  /* ==================== DESIGN (page style + color) ==================== */
+  COLORS.forEach((name) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'swatch';
+    b.dataset.color = name;
+    b.style.background = COLOR_HEX[name];
+    b.setAttribute('aria-label', name[0].toUpperCase() + name.slice(1));
+    b.addEventListener('click', () => { state.color = name; applyDesign(); });
+    els.swatches.appendChild(b);
+  });
+  els.paperSeg.querySelectorAll('button').forEach((b) => {
+    b.addEventListener('click', () => { state.paper = b.dataset.paper; applyDesign(); });
+  });
+
+  function applyDesign() {
+    document.documentElement.setAttribute('data-color', state.color);
+    els.editorSheet.className = 'sheet ' + state.paper;
+    els.viewerSheet.className = 'sheet ' + state.paper;
+    els.paperSeg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.paper === state.paper)));
+    els.swatches.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.color === state.color)));
+    requestAnimationFrame(() => { autosize(els.noteTitleInput); autosize(els.noteBodyInput); });
+  }
+
+  /* ==================== TOAST ==================== */
+  let toastTimer = null;
+  function showToast(message, type = 'info') {
+    clearTimeout(toastTimer);
+    els.toast.textContent = message;
+    els.toast.classList.toggle('error', type === 'error');
+    els.toast.classList.add('show');
+    toastTimer = setTimeout(hideToast, 2600);
+  }
+  function hideToast() { els.toast.classList.remove('show'); }
+
+  /* ==================== ENCODING (older links still open) ==================== */
+  // { t: title, b: body, s: 'c'|'b', p: 'n'|'l'|'s', c: colorIndex, i: [[text, 0|1], ...] }
+  function encodeNoteData(n) {
+    const compact = {
+      t: n.title.trim(),
+      b: n.body.trim(),
+      s: n.listStyle === 'bullet' ? 'b' : 'c',
+      p: n.paper === 'letter' ? 'l' : n.paper === 'slide' ? 's' : 'n',
+      c: Math.max(0, COLORS.indexOf(n.color)),
+      i: n.items.filter(i => i.text.trim().length > 0).map(i => [i.text.trim(), i.done ? 1 : 0])
+    };
+    const json = JSON.stringify(compact);
+    if (typeof LZString !== 'undefined' && LZString.compressToEncodedURIComponent) {
+      return 'lz_' + LZString.compressToEncodedURIComponent(json);
+    }
+    const bytes = new TextEncoder().encode(json);
+    let bin = '';
+    bytes.forEach(b => bin += String.fromCharCode(b));
+    return 'b64_' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function decodeNoteData(str) {
+    try {
+      if (!str) return null;
+      let json = null;
+      if (str.startsWith('lz_')) {
+        if (typeof LZString !== 'undefined') json = LZString.decompressFromEncodedURIComponent(str.slice(3));
+      } else if (str.startsWith('b64_')) {
+        let b64 = str.slice(4).replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        json = new TextDecoder().decode(bytes);
+      } else if (typeof LZString !== 'undefined') {
+        json = LZString.decompressFromEncodedURIComponent(str);
+      }
+      if (!json) return null;
+      const p = JSON.parse(json);
+      return {
+        title: typeof p.t === 'string' ? p.t : '',
+        body: typeof p.b === 'string' ? p.b : '',
+        listStyle: p.s === 'b' ? 'bullet' : 'check',
+        paper: p.p === 'l' ? 'letter' : p.p === 's' ? 'slide' : 'note',
+        color: COLORS[Number.isInteger(p.c) ? p.c : 0] || 'butter',
+        items: Array.isArray(p.i)
+          ? p.i.map(e => ({
+              text: Array.isArray(e) ? String(e[0] || '') : String(e || ''),
+              done: Array.isArray(e) ? Boolean(e[1]) : false
+            }))
+          : []
+      };
+    } catch (err) {
+      console.error('Failed to decode shared note:', err);
+      return null;
+    }
+  }
+
+  /* ==================== EDITOR ==================== */
+  function autosize(el) {
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }
+
+  function setListStyle(style) {
+    state.listStyle = style;
+    els.styleChecklistBtn.setAttribute('aria-pressed', String(style === 'check'));
+    els.styleBulletBtn.setAttribute('aria-pressed', String(style === 'bullet'));
+    renderEditorItems();
+  }
+
+  function addEditorItem(text = '') {
+    const t = text.trim();
+    if (!t) return;
+    state.items.push({ text: t, done: false });
+    els.newItemInput.value = '';
+    renderEditorItems();
+    els.newItemInput.focus();
+  }
+  function removeEditorItem(i) { state.items.splice(i, 1); renderEditorItems(); }
+  function toggleEditorItemDone(i) { if (state.items[i]) { state.items[i].done = !state.items[i].done; renderEditorItems(); } }
+
+  function leadFor(item, interactive, onClick, ghost) {
+    const lead = document.createElement('span');
+    lead.className = 'lead';
+    if (state.listStyle === 'check') {
+      const c = document.createElement(interactive ? 'button' : 'span');
+      c.className = 'check' + (item && item.done ? ' done' : '') + (ghost ? ' ghost' : '');
+      if (interactive) {
+        c.type = 'button';
+        c.setAttribute('aria-label', item.done ? 'Mark as not done' : 'Mark as done');
+        c.addEventListener('click', onClick);
+      }
+      if (item && item.done) c.innerHTML = CHECK_SVG;
+      lead.appendChild(c);
+    } else {
+      const d = document.createElement('span');
+      d.className = 'dot' + (ghost ? ' ghost' : '');
+      lead.appendChild(d);
+    }
+    return lead;
+  }
+
+  function renderEditorItems() {
+    const list = els.editorItemsList;
+    list.innerHTML = '';
+
+    state.items.forEach((item, idx) => {
+      const row = document.createElement('li');
+      row.className = 'row';
+      row.appendChild(leadFor(item, true, () => toggleEditorItemDone(idx)));
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = item.text;
+      input.setAttribute('aria-label', 'List item ' + (idx + 1));
+      input.className = state.listStyle === 'check' && item.done ? 'done' : '';
+      input.addEventListener('input', (e) => { state.items[idx].text = e.target.value; });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); els.newItemInput.focus(); }
+        if (e.key === 'Backspace' && input.value === '') {
+          e.preventDefault();
+          removeEditorItem(idx);
+          const inputs = els.editorItemsList.querySelectorAll('input');
+          (inputs[idx - 1] || els.newItemInput).focus();
+        }
+      });
+      row.appendChild(input);
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'remove';
+      del.setAttribute('aria-label', 'Remove item');
+      del.innerHTML = X_SVG;
+      del.addEventListener('click', () => removeEditorItem(idx));
+      row.appendChild(del);
+
+      list.appendChild(row);
+    });
+
+    const newLead = leadFor(null, false, null, true);
+    newLead.id = 'addLead';
+    newLead.setAttribute('aria-hidden', 'true');
+    els.addLead.replaceWith(newLead);
+    els.addLead = newLead;
+
+    if (state.listStyle === 'check' && state.items.length) {
+      const done = state.items.filter(i => i.done).length;
+      els.editorListMeta.textContent = done + ' of ' + state.items.length + ' completed';
+    } else if (state.items.length) {
+      els.editorListMeta.textContent = state.items.length + (state.items.length === 1 ? ' item' : ' items');
+    } else {
+      els.editorListMeta.textContent = '';
+    }
+  }
+
+  function syncEditorInputsToState() {
+    state.title = els.noteTitleInput.value.replace(/\n/g, ' ');
+    state.body = els.noteBodyInput.value;
+    const pending = els.newItemInput.value.trim();
+    if (pending) {
+      state.items.push({ text: pending, done: false });
+      els.newItemInput.value = '';
+      renderEditorItems();
+    }
+  }
+
+  function hasContent() {
+    return state.title.trim().length > 0 || state.body.trim().length > 0 || state.items.some(i => i.text.trim().length > 0);
+  }
+
+  function buildShareableUrl() {
+    syncEditorInputsToState();
+    const base = window.location.href.split('#')[0].split('?')[0];
+    return base + '#n=' + encodeNoteData(state);
+  }
+
+  /* ==================== CLIPBOARD ==================== */
+  function copyTextToClipboard(text, onSuccess) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+
+    if (ok) { onSuccess && onSuccess(); }
+    else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => onSuccess && onSuccess())
+        .catch(() => showToast('Couldn’t copy. Select the link and copy it manually.', 'error'));
+    } else {
+      showToast('Couldn’t copy. Select the link and copy it manually.', 'error');
+    }
+  }
+
+  /* ==================== VIEW SWITCHING ==================== */
+  function showTools(mode) {
+    els.editorTools.hidden = mode !== 'editor';
+    els.viewerTools.hidden = mode !== 'viewer';
+  }
+
+  function switchToEditor(prefill = false) {
+    state.mode = 'editor';
+    if (!prefill) { state.title = ''; state.body = ''; state.listStyle = 'check'; state.items = []; }
+
+    els.noteTitleInput.value = state.title;
+    els.noteBodyInput.value = state.body;
+    applyDesign();
+    setListStyle(state.listStyle);
+
+    els.shareResultBox.hidden = true;
+    els.viewerView.hidden = true;
+    els.editorView.hidden = false;
+    showTools('editor');
+    document.title = 'LinkNote';
+
+    if (window.location.hash) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+    window.scrollTo(0, 0);
+  }
+
+  function switchToViewer(data) {
+    state.mode = 'viewer';
+    state.title = data.title;
+    state.body = data.body;
+    state.listStyle = data.listStyle;
+    state.paper = data.paper;
+    state.color = data.color;
+    state.items = data.items.map(i => ({ ...i }));
+
+    els.editorView.hidden = true;
+    els.viewerView.hidden = false;
+    showTools('viewer');
+    applyDesign();
+    renderViewerContent();
+    window.scrollTo(0, 0);
+  }
+
+  function renderViewerContent() {
+    const hasTitle = state.title.trim().length > 0;
+    const hasBody = state.body.trim().length > 0;
+    const items = state.items.filter(i => i.text.trim().length > 0);
+    const hasItems = items.length > 0;
+
+    els.viewerTitle.textContent = state.title;
+    els.viewerHead.hidden = !hasTitle;
+    document.title = (hasTitle ? state.title : 'Note') + ' · LinkNote';
+
+    els.viewerBody.textContent = hasBody ? state.body : '';
+    els.viewerBody.hidden = !hasBody;
+    els.viewerBody.style.marginTop = hasTitle ? '' : '0';
+
+    els.viewerListWrapper.hidden = !hasItems;
+    if (hasItems) renderViewerListItems(items);
+
+    els.viewerEmptyFallback.hidden = hasTitle || hasBody || hasItems;
+  }
+
+  function renderViewerListItems(items) {
+    const list = els.viewerItemsList;
+    list.innerHTML = '';
+
+    if (state.listStyle === 'check') {
+      const done = items.filter(i => i.done).length;
+      els.viewerProgressBadge.textContent = done + ' of ' + items.length + ' completed';
+    } else {
+      els.viewerProgressBadge.textContent = items.length + (items.length === 1 ? ' item' : ' items');
+    }
+
+    items.forEach((item) => {
+      const li = document.createElement('li');
+      li.className = 'row view-row' + (state.listStyle === 'check' ? '' : ' static');
+      li.appendChild(leadFor(item, false, null, false));
+
+      const label = document.createElement('span');
+      label.className = 'label' + (state.listStyle === 'check' && item.done ? ' done' : '');
+      label.textContent = item.text;
+      li.appendChild(label);
+
+      if (state.listStyle === 'check') {
+        li.setAttribute('role', 'checkbox');
+        li.setAttribute('aria-checked', String(!!item.done));
+        li.tabIndex = 0;
+        const toggle = () => { item.done = !item.done; renderViewerListItems(items); };
+        li.addEventListener('click', toggle);
+        li.addEventListener('keydown', (e) => {
+          if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); }
+        });
+      }
+      list.appendChild(li);
+    });
+  }
+
+  /* ==================== EVENTS ==================== */
+  els.noteTitleInput.addEventListener('input', () => autosize(els.noteTitleInput));
+  els.noteBodyInput.addEventListener('input', () => autosize(els.noteBodyInput));
+  els.noteTitleInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); els.noteBodyInput.focus(); }
+  });
+  window.addEventListener('resize', () => { autosize(els.noteTitleInput); autosize(els.noteBodyInput); });
+
+  els.styleChecklistBtn.addEventListener('click', () => setListStyle('check'));
+  els.styleBulletBtn.addEventListener('click', () => setListStyle('bullet'));
+
+  els.newItemInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addEditorItem(els.newItemInput.value); }
+  });
+
+  els.clearEditorBtn.addEventListener('click', () => {
+    draft = null;
+    switchToEditor(false);
+    showToast('Note cleared');
+  });
+
+  els.generateLinkBtn.addEventListener('click', () => {
+    syncEditorInputsToState();
+    if (!hasContent()) {
+      showToast('Write something first', 'error');
+      els.noteTitleInput.focus();
+      return;
+    }
+    const url = buildShareableUrl();
+    els.generatedUrlInput.value = url;
+    els.urlSizeLabel.textContent = url.length.toLocaleString() + ' characters';
+    els.shareResultBox.hidden = false;
+    els.copyBtnText.textContent = 'Copy link';
+    els.shareResultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  els.previewNoteBtn.addEventListener('click', () => {
+    syncEditorInputsToState();
+    if (!hasContent()) { showToast('Write something to preview', 'error'); return; }
+    draft = {
+      title: state.title, body: state.body, listStyle: state.listStyle,
+      paper: state.paper, color: state.color, items: state.items.map(i => ({ ...i }))
+    };
+    window.location.hash = buildShareableUrl().split('#')[1];
+  });
+
+  els.copyLinkBtn.addEventListener('click', () => {
+    const url = els.generatedUrlInput.value;
+    if (!url) return;
+    copyTextToClipboard(url, () => {
+      els.copyBtnText.textContent = 'Copied';
+      showToast('Link copied');
+      setTimeout(() => { els.copyBtnText.textContent = 'Copy link'; }, 2200);
+    });
+  });
+
+  els.copySharedPageLinkBtn.addEventListener('click', () => {
+    copyTextToClipboard(window.location.href, () => showToast('Link copied'));
+  });
+
+  els.createOwnNoteBtn.addEventListener('click', () => { draft = null; switchToEditor(false); });
+  els.duplicateToEditBtn.addEventListener('click', () => {
+    draft = null;
+    switchToEditor(true);
+    showToast('Copy ready to edit');
+  });
+
+  /* ==================== ROUTING ==================== */
+  function handleRouteFromUrl() {
+    const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '';
+    const payload = new URLSearchParams(hash).get('n') || new URLSearchParams(window.location.search).get('n');
+
+    if (payload) {
+      const decoded = decodeNoteData(payload);
+      if (decoded) { switchToViewer(decoded); return; }
+      showToast('This link is invalid or damaged', 'error');
+    }
+
+    if (state.mode !== 'editor') {
+      if (draft) {
+        Object.assign(state, {
+          title: draft.title, body: draft.body, listStyle: draft.listStyle,
+          paper: draft.paper, color: draft.color, items: draft.items
+        });
+        draft = null;
+        switchToEditor(true);
+      } else {
+        switchToEditor(false);
+      }
+    }
+  }
+
+  window.addEventListener('hashchange', handleRouteFromUrl);
+
+  initTheme();
+  // Prepare the editor without touching the URL, so shared links still load
+  applyDesign();
+  setListStyle('check');
+  showTools('editor');
+  handleRouteFromUrl();
+</script>
+</body>
+</html>
