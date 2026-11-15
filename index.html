@@ -205,6 +205,10 @@
   .share-field input { flex: 1; min-width: 0; height: 42px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--sep); background: var(--input); font-size: 14px; color: var(--ink-2); outline: 0; text-overflow: ellipsis; }
   .share-field input:focus { border-color: var(--ink-2); color: var(--ink); }
   .share-field .pill { height: 42px; margin: 0; border-radius: 12px; padding: 0 18px; flex: none; }
+  .share-opts { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .share-opts > span { font-size: 13px; color: var(--ink-2); }
+  .share .seg button[aria-pressed="true"] { background: var(--c); color: var(--on-accent); box-shadow: none; }
+  .share .seg button { padding: 5px 14px; font-size: 13px; }
   .share p { margin: 10px 0 0; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
   .share p.warn { color: var(--danger); }
 
@@ -316,6 +320,14 @@
 
     <div class="share" id="shareResultBox" hidden>
       <div class="share-head"><strong>Link ready</strong><span id="urlSizeLabel"></span></div>
+      <div class="share-opts" id="shareOpts" hidden>
+        <span>Image quality · smaller means a shorter link</span>
+        <div class="seg" id="qualitySeg" role="group" aria-label="Image quality">
+          <button type="button" data-q="small">Small</button>
+          <button type="button" data-q="medium">Medium</button>
+          <button type="button" data-q="sharp">Sharp</button>
+        </div>
+      </div>
       <div class="share-field">
         <input id="generatedUrlInput" type="text" readonly aria-label="Shareable link" />
         <button class="pill" id="copyLinkBtn" type="button"><span id="copyBtnText">Copy link</span></button>
@@ -346,10 +358,44 @@
   <button type="button" class="del" id="imgDel">Delete</button>
 </div>
 
-<footer>Notes are compressed into the link. Nothing is stored on a server.</footer>
+<footer id="footerText">Notes are compressed into the link. Nothing is stored on a server.</footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
+  /* ==================== SHORT LINKS (optional) ==================== */
+  // Paste your Firebase values here to get short links like  yoursite/#s=Ab3dE9xK
+  // Leave both empty to keep using long links with no database.
+  const CLOUD = { projectId: 'linknote-c74de', apiKey: 'AIzaSyCUiOnfy1PdpF0-RW21ww5oci-cV62mPus' };
+
+  const cloudOn = () => !!(CLOUD.projectId && CLOUD.apiKey);
+  const cloudBase = () => 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(CLOUD.projectId) + '/databases/(default)/documents/notes';
+  function randomId(len = 8) {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    const bytes = new Uint8Array(len);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => chars[b % chars.length]).join('');
+  }
+  async function cloudSave(payload) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const id = randomId();
+      const res = await fetch(cloudBase() + '?documentId=' + id + '&key=' + encodeURIComponent(CLOUD.apiKey), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { d: { stringValue: payload } } })
+      });
+      if (res.ok) return id;
+      if (res.status === 409) continue; // id already taken, try another
+      throw new Error('Save failed: ' + res.status);
+    }
+    throw new Error('Could not find a free id');
+  }
+  async function cloudLoad(id) {
+    const res = await fetch(cloudBase() + '/' + encodeURIComponent(id) + '?key=' + encodeURIComponent(CLOUD.apiKey));
+    if (!res.ok) return null;
+    const j = await res.json();
+    return (j.fields && j.fields.d && j.fields.d.stringValue) || null;
+  }
+
   /* ==================== STATE ==================== */
   const COLORS = ['butter', 'peach', 'rose', 'lavender', 'sky', 'mint'];
   const COLOR_HEX = { butter: '#f7dc78', peach: '#f8b99d', rose: '#f5aac4', lavender: '#b9acf0', sky: '#92c8f2', mint: '#8fd6b0' };
@@ -864,6 +910,7 @@
     const hasBody = els.viewerBody.textContent.trim().length > 0 || !!els.viewerBody.querySelector('img');
     els.viewerBody.hidden = !hasBody;
     els.viewerBody.style.marginTop = hasTitle ? '' : '0';
+    els.viewerEmptyFallback.textContent = 'This note is empty.';
     els.viewerEmptyFallback.hidden = hasTitle || hasBody;
     document.title = (hasTitle ? data.title : 'Note') + ' · LinkNote';
     window.scrollTo(0, 0);
@@ -887,20 +934,98 @@
     draft = null; switchToEditor(false); showToast('Note cleared');
   });
 
-  els.generateLinkBtn.addEventListener('click', () => {
+  /* ---------- Link size: shrink images for the shared link ---------- */
+  const QUALITY = { small: { side: 360, q: 0.5 }, medium: { side: 480, q: 0.55 }, sharp: null };
+  let shareQuality = 'small';
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = reject;
+      im.src = src;
+    });
+  }
+  async function shrinkImages(html, preset) {
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    for (const img of Array.from(box.querySelectorAll('img'))) {
+      try {
+        const im = await loadImage(img.getAttribute('src'));
+        const scale = Math.min(1, preset.side / Math.max(im.naturalWidth, im.naturalHeight));
+        const w = Math.max(1, Math.round(im.naturalWidth * scale));
+        const h = Math.max(1, Math.round(im.naturalHeight * scale));
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(im, 0, 0, w, h);
+        const out = c.toDataURL('image/jpeg', preset.q);
+        if (out.length < img.getAttribute('src').length) img.setAttribute('src', out);
+      } catch (e) { /* keep the original image */ }
+    }
+    return sanitizeHtml(box.innerHTML);
+  }
+
+  async function makeShareLink() {
     syncEditorToState();
     if (!hasContent()) { showToast('Write something first', 'error'); els.title.focus(); return; }
-    const url = buildShareableUrl();
+
+    if (cloudOn()) {
+      $('shareOpts').hidden = true;
+      els.shareResultBox.hidden = false;
+      els.generatedUrlInput.value = '';
+      els.urlSizeLabel.textContent = 'Saving…';
+      try {
+        const payload = encodeNoteData({ title: state.title, html: state.html, paper: state.paper, color: state.color });
+        if (payload.length > 900000) throw new Error('Note is too large');
+        const id = await cloudSave(payload);
+        const base = window.location.href.split('#')[0].split('?')[0];
+        const shortUrl = base + '#s=' + id;
+        els.generatedUrlInput.value = shortUrl;
+        els.urlSizeLabel.textContent = 'Short link';
+        els.shareHint.className = '';
+        els.shareHint.textContent = 'Your note is saved online. Anyone with this link can open it.';
+        els.copyBtnText.textContent = 'Copy link';
+        els.shareResultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      } catch (err) {
+        console.error(err);
+        showToast('Couldn’t save online, so this is a long link instead', 'error');
+      }
+    }
+
+    const hasImages = state.html.indexOf('<img') !== -1;
+    $('shareOpts').hidden = !hasImages;
+    $('qualitySeg').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.q === shareQuality)));
+
+    let html = state.html;
+    if (hasImages && QUALITY[shareQuality]) {
+      els.urlSizeLabel.textContent = 'Preparing…';
+      els.shareResultBox.hidden = false;
+      html = await shrinkImages(html, QUALITY[shareQuality]);
+    }
+    const base = window.location.href.split('#')[0].split('?')[0];
+    const url = base + '#n=' + encodeNoteData({ title: state.title, html, paper: state.paper, color: state.color });
+
     els.generatedUrlInput.value = url;
     els.urlSizeLabel.textContent = url.length.toLocaleString() + ' characters';
     const long = url.length > 12000;
     els.shareHint.className = long ? 'warn' : '';
     els.shareHint.textContent = long
-      ? 'This link is long because of the images. Some chat apps cut long links, so if it fails there, send it by email or use fewer, smaller images.'
+      ? 'This link is still long because of the images. Try Small, remove an image, or send the link by email, since some chat apps cut long links.'
       : 'Anyone with this link sees your page exactly as it looks here. Nothing is uploaded; the note is stored in the link itself.';
     els.shareResultBox.hidden = false;
     els.copyBtnText.textContent = 'Copy link';
     els.shareResultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  els.generateLinkBtn.addEventListener('click', makeShareLink);
+  $('qualitySeg').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    shareQuality = b.dataset.q;
+    makeShareLink();
   });
 
   els.previewNoteBtn.addEventListener('click', () => {
@@ -923,10 +1048,37 @@
   els.createOwnNoteBtn.addEventListener('click', () => { draft = null; switchToEditor(false); });
   els.duplicateToEditBtn.addEventListener('click', () => { draft = null; switchToEditor(true); showToast('Copy ready to edit'); });
 
+  async function openCloudNote(id) {
+    // show a quiet loading state while the note is fetched
+    state.mode = 'viewer';
+    els.editorView.hidden = true;
+    els.viewerView.hidden = false;
+    showTools('viewer');
+    els.viewerHead.hidden = true;
+    els.viewerBody.hidden = true;
+    els.viewerEmptyFallback.textContent = 'Opening note…';
+    els.viewerEmptyFallback.hidden = false;
+
+    let data = null;
+    if (cloudOn()) {
+      try {
+        const payload = await cloudLoad(id);
+        data = payload ? decodeNoteData(payload) : null;
+      } catch (e) { console.error(e); }
+    }
+    if (data) { switchToViewer(data); return; }
+    els.viewerEmptyFallback.textContent = cloudOn()
+      ? 'This note couldn’t be found. The link may be wrong or incomplete.'
+      : 'This link needs short-link setup on this page, which hasn’t been done yet.';
+  }
+
   /* ==================== ROUTING ==================== */
   function handleRouteFromUrl() {
     const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '';
-    const payload = new URLSearchParams(hash).get('n') || new URLSearchParams(window.location.search).get('n');
+    const hashParams = new URLSearchParams(hash);
+    const payload = hashParams.get('n') || new URLSearchParams(window.location.search).get('n');
+    const shortId = hashParams.get('s');
+    if (shortId && /^[A-Za-z0-9]{6,24}$/.test(shortId)) { openCloudNote(shortId); return; }
     if (payload) {
       const decoded = decodeNoteData(payload);
       if (decoded) { switchToViewer(decoded); return; }
@@ -944,6 +1096,7 @@
 
   /* ==================== INIT ==================== */
   try { document.execCommand('defaultParagraphSeparator', false, 'div'); } catch (e) {}
+  if (cloudOn()) $('footerText').textContent = 'Shared notes are saved online and open from a short link.';
   initTheme();
   applyDesign();
   updateEmpty();
